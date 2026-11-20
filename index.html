@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>Intérprete en Vivo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Intérprete">
+<meta name="theme-color" content="#0c7a6c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-screen interpreter booth. Language pair on top, transcript in the middle, two speaker channels docked at the bottom. */
+:root{
+  --bg:#eef2f4; --surface:#ffffff; --ink:#13202a; --muted:#5a6a76; --line:#d6dee3;
+  --a:#0c7a6c; --a-soft:#dff1ee; --b:#a85a17; --b-soft:#f7ead9; --danger:#b42318;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1418; --surface:#162028; --ink:#e5ecf0; --muted:#93a3ae; --line:#26333c;
+  --a:#3cc3ae; --a-soft:#123430; --b:#efa45c; --b-soft:#3a2816; --danger:#f97066; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e1418; --surface:#162028; --ink:#e5ecf0; --muted:#93a3ae; --line:#26333c;
+  --a:#3cc3ae; --a-soft:#123430; --b:#efa45c; --b-soft:#3a2816; --danger:#f97066; color-scheme:dark }
+*{box-sizing:border-box}html,body{height:100%;margin:0}[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.app{height:100%;display:flex;flex-direction:column;max-width:860px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{padding-block:14px 10px;display:flex;flex-direction:column;gap:10px}
+.titlebar{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:1.45rem;margin:0;letter-spacing:-.01em}
+.toggles{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:.85rem}
+.toggles label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.pair{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.lang{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lang span{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.lang.a span{color:var(--a)} .lang.b span{color:var(--b)}
+select{width:100%;font:inherit;font-weight:600;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.lang.a select{border-left:4px solid var(--a)} .lang.b select{border-left:4px solid var(--b)}
+.swap{align-self:end;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:1.1rem}
+.notice{font-size:.85rem;padding:8px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.notice b{color:var(--ink)}
+main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-block:8px 16px}
+.turn{max-width:88%;min-width:0;display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.turn.a{align-self:flex-start;border-top-left-radius:4px}
+.turn.b{align-self:flex-end;border-top-right-radius:4px}
+.turn .who{display:flex;gap:8px;align-items:center;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.turn .dot{width:8px;height:8px;border-radius:50%}
+.turn.a .dot{background:var(--a)} .turn.b .dot{background:var(--b)}
+.orig{color:var(--muted);overflow-wrap:anywhere}
+.partial{opacity:.55;font-style:italic}
+.trans{font-size:1.18rem;font-weight:500;overflow-wrap:anywhere;min-height:1.5em}
+.turn.a .trans{color:var(--ink)} .turn.b .trans{color:var(--ink)}
+.trans.pending::after{content:"…";color:var(--muted)}
+.tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tools button{font:inherit;font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.tools button:hover{color:var(--ink);border-color:var(--muted)}
+.tools .lat{margin-left:auto;font-family:var(--mono);font-size:.7rem;color:var(--muted)}
+.tag{font-family:var(--mono);font-size:.68rem;padding:1px 6px;border-radius:4px;border:1px solid var(--line)}
+.err{color:var(--danger);font-size:.85rem}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:40ch}
+footer{padding-block:10px max(12px,env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line)}
+.typebar{display:flex;gap:8px}
+.dir{flex:none;font-family:var(--mono);font-size:.78rem;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.typebar input{flex:1;min-width:0;font:inherit;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.send{flex:none;font:inherit;font-weight:600;padding:0 16px;border-radius:10px;border:0;background:var(--ink);color:var(--bg);cursor:pointer}
+.mics{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mic{font:inherit;font-weight:600;font-size:1rem;display:flex;align-items:center;justify-content:center;gap:10px;padding:16px 10px;border-radius:16px;border:2px solid transparent;cursor:pointer;min-width:0}
+.mic small{display:block;font-weight:500;font-size:.75rem;opacity:.8}
+.mic .label{text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mic.a{background:var(--a-soft);color:var(--a);border-color:var(--a)}
+.mic.b{background:var(--b-soft);color:var(--b);border-color:var(--b)}
+.mic.live.a{background:var(--a);color:var(--surface)}
+.mic.live.b{background:var(--b);color:var(--surface)}
+.mic.live svg{animation:pulse 1.1s ease-in-out infinite}
+.mic[disabled]{opacity:.45;cursor:not-allowed}
+@keyframes pulse{50%{transform:scale(1.18)}}
+@media (prefers-reduced-motion:reduce){.mic.live svg{animation:none}}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+@media (max-width:480px){h1{font-size:1.2rem}.trans{font-size:1.08rem}.turn{max-width:96%}.toggles{font-size:.8rem}}
+.pc{font:inherit;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;padding:12px 10px;border-radius:14px;border:2px dashed var(--b);background:transparent;color:var(--b);cursor:pointer}
+.pc small{font-weight:500;opacity:.8}
+.pc.live{border-style:solid;background:var(--b);color:var(--surface)}
+.pc.live svg{animation:pulse 1.1s ease-in-out infinite}
+.speakbar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.speakbar .what{flex:1;min-width:0;font-size:.85rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.speakbar button{font:inherit;font-weight:600;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.speakbar .stop{background:var(--danger);border-color:var(--danger);color:#fff}
+@media (prefers-reduced-motion:reduce){.pc.live svg{animation:none}}
+</style>
+
+</head><body>
+<div class="app">
+  <header>
+    <div class="titlebar">
+      <h1>Intérprete en Vivo</h1>
+      <div class="toggles">
+        <label><input type="checkbox" id="autospeak"> Leer traducciones en voz alta</label>
+      </div>
+    </div>
+    <div class="pair">
+      <label class="lang a"><span>Tú hablas</span><select id="langA"></select></label>
+      <button class="swap" id="swap" title="Intercambiar idiomas" aria-label="Intercambiar idiomas">⇄</button>
+      <label class="lang b"><span>La otra persona</span><select id="langB"></select></label>
+    </div>
+    <div class="notice" id="notice" hidden></div>
+  </header>
+
+  <main id="log" aria-live="polite"></main>
+
+  <footer>
+    <div class="speakbar" id="speakbar" hidden>
+      <span class="what" id="speakwhat">Leyendo traducción…</span>
+      <button type="button" id="pauseBtn">❚❚ Pausar</button>
+      <button type="button" class="stop" id="stopBtn">■ Parar</button>
+    </div>
+    <form class="typebar" id="typeform">
+      <button type="button" class="dir" id="dir" title="Cambiar dirección">ES → EN</button>
+      <input id="textin" autocomplete="off" placeholder="Escribe algo para traducir">
+      <button type="button" class="dir" id="pasteBtn" title="Pegar">Pegar</button>
+      <button class="send" type="submit">Traducir</button>
+    </form>
+    <div class="mics">
+      <button class="mic a" id="micA" type="button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" fill="none"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="label"><span id="micAtext">Toca y habla</span><small id="micAlang"></small></span></button>
+      <button class="mic b" id="micB" type="button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" fill="none"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="label"><span id="micBtext">Toca y habla</span><small id="micBlang"></small></span></button>
+    </div>
+  </footer>
+</div>
+
+<script>
+// code, Spanish name, speech locale, translator code, Whisper language
+const LANGS = [
+  ["es","Español","es-ES","es","spanish"],["en","Inglés","en-US","en","english"],["pt-BR","Portugués","pt-BR","pt","portuguese"],
+  ["fr","Francés","fr-FR","fr","french"],["it","Italiano","it-IT","it","italian"],["de","Alemán","de-DE","de","german"],
+  ["zh","Chino (mandarín)","zh-CN","zh","chinese"],["ja","Japonés","ja-JP","ja","japanese"],["ko","Coreano","ko-KR","ko","korean"],
+  ["ru","Ruso","ru-RU","ru","russian"],["ar","Árabe","ar-SA","ar","arabic"],["hi","Hindi","hi-IN","hi","hindi"],
+  ["tr","Turco","tr-TR","tr","turkish"],["vi","Vietnamita","vi-VN","vi","vietnamese"],["id","Indonesio","id-ID","id","indonesian"],
+  ["th","Tailandés","th-TH","th","thai"],["pl","Polaco","pl-PL","pl","polish"],["nl","Neerlandés","nl-NL","nl","dutch"],
+  ["uk","Ucraniano","uk-UA","uk","ukrainian"],["bn","Bengalí","bn-IN","bn","bengali"],["ur","Urdu","ur-PK","ur","urdu"],
+  ["fa","Persa","fa-IR","fa","persian"],["sw","Suajili","sw-KE","sw","swahili"],["tl","Filipino","fil-PH","fil","tagalog"],
+  ["he","Hebreo","he-IL","he","hebrew"],["el","Griego","el-GR","el","greek"],["ro","Rumano","ro-RO","ro","romanian"],["cs","Checo","cs-CZ","cs","czech"]
+];
+const L = Object.fromEntries(LANGS.map(([c,n,loc,tc,w])=>[c,{code:c,name:n,locale:loc,tcode:tc,whisper:w}]));
+const $ = id => document.getElementById(id);
+const store = { get(k,d){try{return localStorage.getItem(k)??d}catch{return d}}, set(k,v){try{localStorage.setItem(k,v)}catch{}} };
+
+const state = { a: store.get("li2.a","es"), b: store.get("li2.b","en"), typeSide:"a", turns:[], live:null };
+if (!L[state.a]) state.a="es"; if (!L[state.b]) state.b="en";
+let examples=false;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+for (const sel of [$("langA"),$("langB")]) sel.innerHTML = LANGS.map(([c,n])=>`<option value="${c}">${n}</option>`).join("");
+$("langA").value = state.a; $("langB").value = state.b;
+$("autospeak").checked = store.get("li2.speak","0")==="1";
+
+function refreshLabels(){
+  $("micAlang").textContent = L[state.a].name; $("micBlang").textContent = L[state.b].name;
+  const from = state.typeSide==="a"?state.a:state.b, to = state.typeSide==="a"?state.b:state.a;
+  $("dir").textContent = `${from.split("-")[0].toUpperCase()} → ${to.split("-")[0].toUpperCase()}`;
+  $("textin").placeholder = `Escribe en ${L[from].name.toLowerCase()}`;
+}
+function langsChanged(){ store.set("li2.a",state.a); store.set("li2.b",state.b); refreshLabels(); }
+$("langA").onchange = e=>{state.a=e.target.value;langsChanged();warmUp()};
+$("langB").onchange = e=>{state.b=e.target.value;langsChanged();warmUp()};
+$("swap").onclick = ()=>{[state.a,state.b]=[state.b,state.a];$("langA").value=state.a;$("langB").value=state.b;langsChanged()};
+$("dir").onclick = ()=>{state.typeSide = state.typeSide==="a"?"b":"a";refreshLabels()};
+$("autospeak").onchange = e=>store.set("li2.speak",e.target.checked?"1":"0");
+refreshLabels();
+
+/* ---------- transcript ---------- */
+function newTurn(side, opts={}){
+  if (examples){ examples=false; $("log").innerHTML=""; }
+  const from = side==="a"?state.a:state.b, to = side==="a"?state.b:state.a;
+  const t = { side, from, to, finals:"", partial:"", chunks:[], q:Promise.resolve(), example:!!opts.example, pc:!!opts.pc };
+  const el = document.createElement("article");
+  el.className = "turn "+side+(t.pc?" pcaudio":"");
+  el.innerHTML = `<div class="who"><span class="dot"></span><span class="w"></span>${t.example?'<span class="tag">Ejemplo</span>':""}</div>
+    <div class="orig"></div><div class="trans pending" lang="${L[to].tcode}"></div><div class="err" hidden></div>
+    <div class="tools" hidden><button data-act="play">▶ Escuchar</button><button data-act="copy">Copiar</button><span class="lat"></span></div>`;
+  el.querySelector(".w").textContent = `${t.pc?"Audio del PC · ":""}${L[from].name} → ${L[to].name}`;
+  el.querySelector("[data-act=play]").onclick = ()=>speak(translationOf(t), to);
+  el.querySelector("[data-act=copy]").onclick = async ev=>{
+    const b=ev.currentTarget; try{await navigator.clipboard.writeText(translationOf(t)); b.textContent="Copiado"}catch{b.textContent="No se pudo copiar"} setTimeout(()=>b.textContent="Copiar",1500)};
+  t.el = el; $("log").appendChild(el); state.turns.push(t); render(t);
+  return t;
+}
+const translationOf = t => t.chunks.map(c=>c.out.trim()).filter(Boolean).join(" ");
+function render(t){
+  const o = t.el.querySelector(".orig");
+  o.textContent = t.finals.trim();
+  if (t.partial){ const s=document.createElement("span"); s.className="partial"; s.textContent=(t.finals?" ":"")+t.partial; o.appendChild(s); }
+  if (!t.finals && !t.partial) o.textContent = t.listening ? "Escuchando…" : "";
+  const tr = t.el.querySelector(".trans");
+  tr.textContent = translationOf(t);
+  tr.classList.toggle("pending", !!(t.chunks.some(c=>!c.done) || (t.listening && !t.chunks.length)));
+  t.el.querySelector(".tools").hidden = !(!t.listening && t.chunks.length && t.chunks.every(c=>c.done));
+  const f = t.chunks.find(c=>c.ms);
+  if (f) t.el.querySelector(".lat").textContent = `${f.engine} · ${Math.round(f.ms)} ms`;
+  const log=$("log"); log.scrollTop = log.scrollHeight;
+}
+function showErr(t,msg){ const e=t.el.querySelector(".err"); e.textContent=msg; e.hidden=false; }
+
+/* ---------- translation: Chrome's on-device translator, else the free MyMemory service ---------- */
+const translators = {};
+function getTranslator(from, to){
+  const key = from+">"+to;
+  if (!("Translator" in self)) return Promise.reject(new Error("no-api"));
+  if (!translators[key]) {
+    translators[key] = Translator.create({ sourceLanguage:L[from].tcode, targetLanguage:L[to].tcode,
+      monitor(m){ m.addEventListener("downloadprogress", e=>note(`Descargando el paquete de idioma ${L[from].name} → ${L[to].name}… ${Math.round(e.loaded*100)}%`, e.loaded>=1)); } });
+    translators[key].catch(()=>{ delete translators[key]; });
+  }
+  return translators[key];
+}
+// Call from a click so Chrome may download language packs.
+function warmUp(){ getTranslator(state.a,state.b).catch(()=>{}); getTranslator(state.b,state.a).catch(()=>{}); }
+
+async function translateText(text, from, to){
+  try{
+    const tr = await getTranslator(from,to);
+    return { text: await tr.translate(text), engine:"en el dispositivo" };
+  }catch(e){
+    const r = await fetch("https://api.mymemory.translated.net/get?q="+encodeURIComponent(text.slice(0,500))+"&langpair="+encodeURIComponent(L[from].tcode+"|"+L[to].tcode));
+    if (!r.ok) throw new Error("el traductor en línea no respondió ("+r.status+").");
+    const j = await r.json();
+    if (j.responseStatus && j.responseStatus!=200) throw new Error(j.responseDetails || "el traductor en línea rechazó la petición.");
+    const out = j.responseData?.translatedText || "";
+    if (/MYMEMORY WARNING/i.test(out)) throw new Error("se acabó el límite diario del traductor en línea gratuito. Vuelve a intentarlo mañana.");
+    return { text: out, engine:"en línea" };
+  }
+}
+function queueChunk(t, text){
+  const chunk = { src:text, out:"", done:false };
+  t.chunks.push(chunk); render(t);
+  t.q = t.q.then(async ()=>{
+    const t0 = performance.now();
+    try{ const r = await translateText(text, t.from, t.to); chunk.out=r.text; chunk.engine=r.engine; chunk.ms=performance.now()-t0; }
+    catch(e){ showErr(t, "No se pudo traducir: "+(e?.message||e)); }
+    chunk.done = true; render(t);
+  });
+}
+
+/* ---------- speech out, with Pause and Stop ---------- */
+let voices = [];
+function loadVoices(){ voices = ("speechSynthesis" in window) ? speechSynthesis.getVoices() : []; }
+if ("speechSynthesis" in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+function pickVoice(code){
+  const loc = L[code].locale.toLowerCase(), base = loc.split("-")[0];
+  const m = voices.filter(v=>v.lang.toLowerCase().replace("_","-").startsWith(base));
+  const score = v => (v.lang.toLowerCase().replace("_","-")===loc?2:0) + (/natural|online|google/i.test(v.name)?1:0);
+  return m.sort((x,y)=>score(y)-score(x))[0];
+}
+let speakTimer=null;
+function speakUI(on){
+  $("speakbar").hidden = !on;
+  $("pauseBtn").textContent = "❚❚ Pausar";
+  clearInterval(speakTimer);
+  // Chrome sometimes misses the end event; poll so the bar never gets stuck.
+  if (on) speakTimer = setInterval(()=>{ if (!speechSynthesis.speaking && !speechSynthesis.pending) speakUI(false); }, 500);
+}
+function speak(text, code){
+  if (!text || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = L[code].locale;
+  const v = pickVoice(code);
+  if (v) u.voice = v; else if (voices.length) note(`No hay una voz de ${L[code].name.toLowerCase()} instalada. Puedes añadirla en Configuración de Windows › Hora e idioma › Voz.`);
+  u.onend = u.onerror = ()=>speakUI(false);
+  $("speakwhat").textContent = text;
+  speakUI(true);
+  speechSynthesis.speak(u);
+}
+function stopSpeaking(){ if ("speechSynthesis" in window) speechSynthesis.cancel(); speakUI(false); }
+$("stopBtn").onclick = stopSpeaking;
+$("pauseBtn").onclick = ()=>{
+  if (speechSynthesis.paused){ speechSynthesis.resume(); $("pauseBtn").textContent="❚❚ Pausar"; }
+  else { speechSynthesis.pause(); $("pauseBtn").textContent="▶ Seguir"; }
+};
+document.addEventListener("keydown", e=>{ if (e.key==="Escape") stopSpeaking(); });
+
+/* ---------- speech in (microphone) ---------- */
+function setMic(side){
+  for (const s of ["a","b"]){
+    $("mic"+s.toUpperCase()).classList.toggle("live", s===side);
+    $("mic"+s.toUpperCase()+"text").textContent = s===side ? "Toca para terminar" : "Toca y habla";
+  }
+}
+async function finishTurn(t, opts={}){
+  try{ t.wake?.release(); }catch{}
+  t.listening=false; t.partial=""; render(t);
+  if (!t.finals.trim()){ if (!t.el.querySelector(".err").textContent){ t.el.remove(); state.turns=state.turns.filter(x=>x!==t);} return; }
+  await t.q; render(t);
+  if (!opts.silent && $("autospeak").checked) speak(translationOf(t), t.to);
+}
+function micClick(side){
+  warmUp();
+  if (!SR){ note("Este navegador no reconoce la voz. En Android usa Google Chrome; en iPhone usa Safari. Puedes escribir igualmente."); $("textin").focus(); return; }
+  const cur = state.live;
+  if (cur){ cur.userStop=true; cur.rec.stop(); if (cur.side===side) return; }
+  stopSpeaking();
+  const t = newTurn(side); t.listening=true; state.live=t; setMic(side); render(t);
+  try{ navigator.wakeLock?.request("screen").then(l=>{ t.wake=l; }).catch(()=>{}); }catch{}
+  const rec = new SR(); t.rec = rec;
+  rec.lang = L[t.from].locale; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = e=>{
+    let interim = "";
+    for (let i=e.resultIndex;i<e.results.length;i++){
+      const r=e.results[i], txt=r[0].transcript;
+      if (r.isFinal){ if (txt.trim()){ t.finals += (t.finals?" ":"")+txt.trim(); queueChunk(t, txt.trim()); } }
+      else interim += txt;
+    }
+    t.partial = interim.trim(); render(t);
+  };
+  rec.onerror = e=>{
+    if (["not-allowed","service-not-allowed","network","language-not-supported","audio-capture"].includes(e.error)) t.fatal=true;
+    if (e.error==="audio-capture") showErr(t,"Otra app está usando el micrófono (por ejemplo, una llamada de Discord). Sal de la llamada o escribe el texto.");
+    else if (e.error==="not-allowed"||e.error==="service-not-allowed") showErr(t,"El micrófono está bloqueado. Permite el micrófono en los ajustes del navegador para esta página.");
+    else if (e.error==="network") showErr(t,"El micrófono necesita conexión a internet.");
+    else if (e.error==="language-not-supported") showErr(t,`El reconocimiento de voz no está disponible en ${L[t.from].name.toLowerCase()}. Escríbelo.`);
+    else if (e.error!=="no-speech" && e.error!=="aborted") showErr(t,"El micrófono se detuvo: "+e.error);
+  };
+  rec.onend = ()=>{
+    const again = state.live===t && !t.userStop && !t.fatal;
+    if (state.live===t){ state.live=null; setMic(null); }
+    finishTurn(t);
+    if (again) micClick(side); // phones stop listening after a pause; keep going until tapped
+  };
+  try{ rec.start(); }catch(e){ showErr(t,"No se pudo encender el micrófono: "+e.message); state.live=null; setMic(null); finishTurn(t); }
+}
+$("micA").onclick = ()=>micClick("a");
+$("micB").onclick = ()=>micClick("b");
+
+/* ---------- typed input ---------- */
+$("pasteBtn").onclick = async ()=>{
+  try{ const t = await navigator.clipboard.readText(); if (t){ $("textin").value=t; } }
+  catch{ note("No se pudo pegar automáticamente. Mantén pulsado el cuadro de texto y elige Pegar."); }
+  $("textin").focus();
+};
+$("typeform").addEventListener("submit", e=>{
+  e.preventDefault(); warmUp();
+  const text=$("textin").value.trim(); if(!text) return;
+  $("textin").value="";
+  const t=newTurn(state.typeSide); t.finals=text; queueChunk(t,text); finishTurn(t);
+});
+
+function note(msg, hide){ const n=$("notice"); n.textContent=msg; n.hidden=!!hide || !msg; }
+
+/* ---------- example state ---------- */
+(function seed(){
+  const ex=[["b","Hey, are you joining the next match?","Oye, ¿te unes a la próxima partida?"],
+            ["a","Sí, dame dos minutos y entro.","Yes, give me two minutes and I'll join."]];
+  const sa=state.a, sb=state.b; state.a="es"; state.b="en";
+  for (const [side,src,out] of ex){ const t=newTurn(side,{example:true}); t.finals=src; t.chunks=[{src,out,done:true,ms:180,engine:"en el dispositivo"}]; render(t); }
+  state.a=sa; state.b=sb; examples=true;
+})();
+
+if (!SR) note("Este navegador no reconoce la voz. En Android usa Google Chrome; en iPhone usa Safari. Puedes escribir igualmente.");
+
+if ("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body></html>
