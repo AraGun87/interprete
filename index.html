@@ -204,7 +204,7 @@ function render(t){
 function showErr(t,msg){ const e=t.el.querySelector(".err"); e.textContent=msg; e.hidden=false; }
 
 /* ---------- translation: Chrome's on-device translator, else the free MyMemory service ---------- */
-const translators = {};
+const translators = {}, slowPairs = {};
 function getTranslator(from, to){
   const key = from+">"+to;
   if (!("Translator" in self)) return Promise.reject(new Error("no-api"));
@@ -221,7 +221,9 @@ function warmUp(){ getTranslator(state.a,state.b).catch(()=>{}); getTranslator(s
 async function translateText(text, from, to){
   try{
     // Don't wait forever for Chrome's translator (it may be downloading or blocked); fall back after 4 s.
-    const tr = await Promise.race([getTranslator(from,to), new Promise((_,rej)=>setTimeout(()=>rej(new Error("slow")),4000))]);
+    const key = from+">"+to;
+    if (slowPairs[key]) throw new Error("slow");
+    const tr = await Promise.race([getTranslator(from,to), new Promise((_,rej)=>setTimeout(()=>{ slowPairs[key]=true; getTranslator(from,to).then(()=>{ delete slowPairs[key]; }).catch(()=>{}); rej(new Error("slow")); },4000))]);
     return { text: await tr.translate(text), engine:"en el dispositivo" };
   }catch(e){
     const r = await fetch("https://api.mymemory.translated.net/get?q="+encodeURIComponent(text.slice(0,500))+"&langpair="+encodeURIComponent(L[from].tcode+"|"+L[to].tcode));
