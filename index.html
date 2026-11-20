@@ -220,7 +220,8 @@ function warmUp(){ getTranslator(state.a,state.b).catch(()=>{}); getTranslator(s
 
 async function translateText(text, from, to){
   try{
-    const tr = await getTranslator(from,to);
+    // Don't wait forever for Chrome's translator (it may be downloading or blocked); fall back after 4 s.
+    const tr = await Promise.race([getTranslator(from,to), new Promise((_,rej)=>setTimeout(()=>rej(new Error("slow")),4000))]);
     return { text: await tr.translate(text), engine:"en el dispositivo" };
   }catch(e){
     const r = await fetch("https://api.mymemory.translated.net/get?q="+encodeURIComponent(text.slice(0,500))+"&langpair="+encodeURIComponent(L[from].tcode+"|"+L[to].tcode));
